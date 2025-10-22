@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Clinical Evidence Navigator - Web UI
-Built with Streamlit for easy web access
+Clinical Evidence Navigator - Web UI (Cloud Version)
+Built with Streamlit for easy web access - Modified for Streamlit Cloud
 """
 
 import os
@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from clinical_evidence import ClinicalEvidenceNavigator
+from clinical_evidence_cloud import ClinicalEvidenceNavigator
 
 # --- Page config ---
 st.set_page_config(
@@ -50,6 +50,8 @@ st.markdown(
 .evidence-grade-B { border-left-color: #ffc107; }
 .evidence-grade-C { border-left-color: #fd7e14; }
 .evidence-grade-D { border-left-color: #dc3545; }
+.api-status-good { color: #28a745; font-weight: bold; }
+.api-status-bad { color: #dc3545; font-weight: bold; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -163,6 +165,18 @@ def display_database_stats():
     except Exception as e:
         st.sidebar.error(f"Database stats unavailable: {e}")
 
+def display_api_status():
+    """Display API status in sidebar"""
+    st.sidebar.markdown("## 🔌 API Status")
+    
+    # Check Groq API
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key:
+        st.sidebar.markdown('<span class="api-status-good">✅ Groq API: Configured</span>', unsafe_allow_html=True)
+    else:
+        st.sidebar.markdown('<span class="api-status-bad">❌ Groq API: Not configured</span>', unsafe_allow_html=True)
+        st.sidebar.markdown("**Setup:** Add `GROQ_API_KEY` to Streamlit secrets")
+
 def export_results():
     results = st.session_state.get("search_results")
     if not results:
@@ -197,13 +211,16 @@ RESULTS:
 
 # --- UI ---
 st.markdown('<h1 class="main-header">🏥 Clinical Evidence Navigator</h1>', unsafe_allow_html=True)
-st.markdown("### AI-Powered Clinical Research Analysis & Evidence Synthesis")
+st.markdown("### AI-Powered Clinical Research Analysis & Evidence Synthesis (Cloud Version)")
 
 # Sidebar
 with st.sidebar:
     st.markdown("## ⚙️ System Status")
     if st.button("🚀 Initialize System", type="primary"):
         ensure_navigator()
+    
+    display_api_status()
+    
     if st.session_state.navigator_ready:
         nav = get_navigator()
         st.success("✅ Navigator: Ready")
@@ -213,12 +230,13 @@ with st.sidebar:
         st.write("**Chroma collection:** clinical_evidence")
     else:
         st.warning("⚠️ Navigator: Not initialized")
+    
     display_database_stats()
     display_search_history()
 
 # If not initialized, encourage init but still allow search (auto-init on run)
 if not st.session_state.navigator_ready:
-    st.info("👆 Click **Initialize System** (or just run a search — we’ll auto-init).")
+    st.info("👆 Click **Initialize System** (or just run a search — we'll auto-init).")
 
 # Search interface
 st.markdown("## 🔍 Clinical Evidence Search")
@@ -238,7 +256,7 @@ with st.form("search_form"):
 # Example queries
 st.markdown("**💡 Example Queries:**")
 e1, e2, e3 = st.columns(3)
-if e1.button("🫀 Hypertension ACE Inhibitors"):
+if e1.button("🫀Hypertension ACE Inhibitors"):
     st.session_state["current_query"] = "hypertension ACE inhibitors elderly patients"
     perform_search(st.session_state["current_query"])
     st.success(f"✅ Search completed for: {st.session_state['current_query']}")
@@ -256,7 +274,7 @@ if search_button and query:
     st.session_state["current_query"] = query
     out = perform_search(query)
     if out:
-        st.success(f"✅ Search completed for: {query}")
+        st.success(f"Search completed for: {query}")
 
 # Results + export
 if st.session_state["search_results"]:
@@ -270,7 +288,8 @@ st.markdown(
     """
 <div style='text-align: center; color: #666; margin-top: 2rem;'>
   <p>🏥 <strong>Clinical Evidence Navigator</strong> | AI-Powered Evidence-Based Medicine</p>
-  <p>Built with CrewAI, Ollama, ChromaDB | 100% Free & Open Source</p>
+  <p>Built with CrewAI, Groq API, ChromaDB | Cloud-Ready & Open Source</p>
+  <p><small>Powered by Groq's Lightning-Fast LLM API</small></p>
 </div>
 """,
     unsafe_allow_html=True,
