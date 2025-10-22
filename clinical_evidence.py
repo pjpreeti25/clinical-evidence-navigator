@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Free Agentic AI Clinical Evidence Navigator
-Built with CrewAI, Chroma, Ollama, and custom scrapers
+Free Agentic AI Clinical Evidence Navigator - Cloud Version
+Built with CrewAI, Chroma, Groq API, and custom scrapers
+Modified for Streamlit Cloud deployment
 """
 
 import os
@@ -10,7 +11,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 import json
-import time  # <-- added
+import time
 
 # Core dependencies
 import requests
@@ -19,7 +20,7 @@ import chromadb
 from chromadb.config import Settings
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import BaseTool
-import ollama
+from groq import Groq
 
 # ----------------------------
 # Logging
@@ -44,7 +45,7 @@ def _coerce_query(arg: str) -> str:
 
 
 # ============================================================
-# Main Navigator
+# Main Navigator - Cloud Version
 # ============================================================
 class ClinicalEvidenceNavigator:
     def __init__(self, data_dir: str = "./data"):
@@ -55,10 +56,11 @@ class ClinicalEvidenceNavigator:
         self.collection = None
         self.model_name: Optional[str] = None
         self.crewai_llm: Optional[LLM] = None
+        self.groq_client: Optional[Groq] = None
 
         self.setup_database()
         self.setup_vector_store()
-        self.setup_ollama()
+        self.setup_groq()
         self.setup_agents()
 
     # ----------------------------
@@ -123,48 +125,39 @@ class ClinicalEvidenceNavigator:
         logger.info("Vector store initialized successfully")
 
     # ----------------------------
-    # Ollama & CrewAI LLM
+    # Groq API & CrewAI LLM
     # ----------------------------
-    def setup_ollama(self):
-        """Verify Ollama is running and model is available; create CrewAI LLM binding."""
+    def setup_groq(self):
+        """Initialize Groq API client and create CrewAI LLM binding."""
         try:
-            # Prevent LiteLLM from trying to use OpenAI
-            os.environ["OPENAI_API_KEY"] = "sk-111111111111111111111111111111111111111111111111"
-            
-            response = ollama.list()
-            models = [m.get("name") for m in response.get("models", []) if "name" in m]
-
-            # Prefer a mistral variant; otherwise pick first available
-            preferred = next((m for m in models if m and m.startswith("mistral")), None)
-            if preferred:
-                self.model_name = preferred
-            elif models:
-                self.model_name = models[0]
-                logger.warning(
-                    "Mistral model not found. Using '%s'. Consider running: `ollama pull mistral`",
-                    self.model_name
-                )
-            else:
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                logger.warning("GROQ_API_KEY not found. Please set it as an environment variable.")
                 self.model_name = None
-                logger.warning("No models found in Ollama. Run: `ollama pull mistral`")
+                self.crewai_llm = None
+                self.groq_client = None
+                return
 
-            if self.model_name:
-                base_model = self.model_name.split(":")[0]  # mistral, llama3, etc.
-                host = os.getenv("OLLAMA_HOST", "127.0.0.1:11434")  # allow custom port
-                # Increase timeout + cap tokens to reduce stalls
-                self.crewai_llm = LLM(
-                    model=f"ollama/{base_model}",
-                    base_url=f"http://{host}",
-                    temperature=0.2,
-                    timeout=300,        # was 120
-                    max_tokens=768,     # cap length
-                )
+            self.groq_client = Groq(api_key=api_key)
+            
+            # Use Llama 3.1 70B model (fast and high quality)
+            self.model_name = "llama3-1-70b-versatile"
+            
+            # Create CrewAI LLM binding for Groq
+            self.crewai_llm = LLM(
+                model="groq/llama3-1-70b-versatile",
+                api_key=api_key,
+                temperature=0.2,
+                timeout=60,
+                max_tokens=1024,
+            )
 
-            logger.info("Ollama initialized with model: %s", self.model_name)
+            logger.info("Groq API initialized with model: %s", self.model_name)
         except Exception as e:
-            logger.error("Ollama setup failed: %s", e)
+            logger.error("Groq setup failed: %s", e)
             self.model_name = None
             self.crewai_llm = None
+            self.groq_client = None
 
     # ----------------------------
     # Persistence helpers
@@ -264,12 +257,12 @@ class ClinicalEvidenceNavigator:
         for t in (pubmed_tool, trials_tool):
             t.navigator = self  # set at runtime
 
-        # pass model name to LLM-using tools
-        analysis_tool.model_name = self.model_name
-        synthesis_tool.model_name = self.model_name
-        gap_tool.model_name = self.model_name
+        # pass groq client to LLM-using tools
+        analysis_tool.groq_client = self.groq_client
+        synthesis_tool.groq_client = self.groq_client
+        gap_tool.groq_client = self.groq_client
 
-        # Agents (bind CrewAI LLM so the agent can plan/execute with local Ollama)
+        # Agents (bind CrewAI LLM so the agent can plan/execute with Groq)
         self.research_agent = Agent(
             role="Clinical Research Specialist",
             goal="Find and extract relevant clinical evidence from PubMed and ClinicalTrials.gov",
@@ -407,9 +400,9 @@ Format as a structured clinical evidence report.
 
         evidence_text = f"PUBMED:\n{pub_res_raw}\n\nCLINICALTRIALS:\n{ct_res_raw}"
 
-        ana = EvidenceAnalysisTool(); ana.model_name = self.model_name
-        syn = EvidenceSynthesisTool(); syn.model_name = self.model_name
-        gap = GapAnalysisTool(); gap.model_name = self.model_name
+        ana = EvidenceAnalysisTool(); ana.groq_client = self.groq_client
+        syn = EvidenceSynthesisTool(); syn.groq_client = self.groq_client
+        gap = GapAnalysisTool(); gap.groq_client = self.groq_client
 
         analyzed = ana._run(evidence_text)
         synthesized = syn._run(analyzed)
@@ -619,15 +612,16 @@ class ClinicalTrialsScraperTool(BaseTool):
 
 
 # ============================================================
-# LLM-backed Analysis / Synthesis Tools
+# LLM-backed Analysis / Synthesis Tools - Groq Version
 # ============================================================
 
-def _extract_ollama_text(response: Any) -> str:
-    """Robustly extract text from ollama.chat response dicts."""
+def _extract_groq_text(response: Any) -> str:
+    """Robustly extract text from Groq response."""
     if isinstance(response, dict):
-        msg = response.get("message")
-        if isinstance(msg, dict):
-            content = msg.get("content")
+        choices = response.get("choices", [])
+        if choices and len(choices) > 0:
+            message = choices[0].get("message", {})
+            content = message.get("content", "")
             if content:
                 return content
         content = response.get("content")
@@ -641,14 +635,14 @@ class EvidenceAnalysisTool(BaseTool):
     description: str = "Analyzes clinical evidence quality and provides evidence grading"
 
     # Declare pydantic fields; allow extras
-    model_name: Optional[str] = None
+    groq_client: Optional[Groq] = None
     model_config = {"extra": "allow"}
 
     def _run(self, evidence_data: str) -> str:
-        """Analyze evidence quality using Ollama"""
+        """Analyze evidence quality using Groq API"""
         try:
-            if not self.model_name:
-                return "Ollama model not available for analysis"
+            if not self.groq_client:
+                return "Groq API not available for analysis"
 
             prompt = f"""
 Analyze the following clinical evidence and provide:
@@ -664,11 +658,13 @@ Evidence data:
 Provide a structured analysis using evidence-based medicine principles.
             """.strip()
 
-            response = ollama.chat(
-                model=self.model_name,
+            response = self.groq_client.chat.completions.create(
+                model="llama3-1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=1024,
             )
-            return _extract_ollama_text(response)
+            return _extract_groq_text(response)
         except Exception as e:
             return f"Error analyzing evidence: {str(e)}"
 
@@ -677,14 +673,14 @@ class EvidenceSynthesisTool(BaseTool):
     name: str = "evidence_synthesizer"
     description: str = "Synthesizes evidence into clinical recommendations"
 
-    model_name: Optional[str] = None
+    groq_client: Optional[Groq] = None
     model_config = {"extra": "allow"}
 
     def _run(self, analyzed_evidence: str) -> str:
-        """Synthesize evidence using Ollama"""
+        """Synthesize evidence using Groq API"""
         try:
-            if not self.model_name:
-                return "Ollama model not available for synthesis"
+            if not self.groq_client:
+                return "Groq API not available for synthesis"
 
             prompt = f"""
 Based on the analyzed clinical evidence, create a comprehensive clinical report with:
@@ -701,11 +697,13 @@ Analyzed evidence:
 Format as a professional clinical evidence report.
             """.strip()
 
-            response = ollama.chat(
-                model=self.model_name,
+            response = self.groq_client.chat.completions.create(
+                model="llama3-1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=1024,
             )
-            return _extract_ollama_text(response)
+            return _extract_groq_text(response)
         except Exception as e:
             return f"Error synthesizing evidence: {str(e)}"
 
@@ -714,14 +712,14 @@ class GapAnalysisTool(BaseTool):
     name: str = "gap_analyzer"
     description: str = "Identifies evidence gaps and research needs"
 
-    model_name: Optional[str] = None
+    groq_client: Optional[Groq] = None
     model_config = {"extra": "allow"}
 
     def _run(self, synthesized_evidence: str) -> str:
-        """Identify evidence gaps using Ollama"""
+        """Identify evidence gaps using Groq API"""
         try:
-            if not self.model_name:
-                return "Ollama model not available for gap analysis"
+            if not self.groq_client:
+                return "Groq API not available for gap analysis"
 
             prompt = f"""
 Based on the synthesized clinical evidence, identify:
@@ -737,11 +735,13 @@ Synthesized evidence:
 Provide specific, actionable gap analysis.
             """.strip()
 
-            response = ollama.chat(
-                model=self.model_name,
+            response = self.groq_client.chat.completions.create(
+                model="llama3-1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=1024,
             )
-            return _extract_ollama_text(response)
+            return _extract_groq_text(response)
         except Exception as e:
             return f"Error analyzing gaps: {str(e)}"
 
@@ -751,14 +751,14 @@ Provide specific, actionable gap analysis.
 # ============================================================
 def main():
     """Main application entry point"""
-    print("🏥 Clinical Evidence Navigator - Starting...")
+    print(" Clinical Evidence Navigator - Cloud Version Starting...")
 
     navigator = ClinicalEvidenceNavigator()
 
-    print("\n✅ System initialized successfully!")
+    print("\n System initialized successfully!")
     if not navigator.model_name:
-        print("⚠️  Ollama model not detected. Run:\n    ollama serve &\n    ollama pull mistral")
-    print("📋 Available commands:")
+        print("Groq API not configured. Please set GROQ_API_KEY environment variable.")
+    print("Available commands:")
     print("  - search: Query clinical evidence (agent)")
     print("  - search-fast: Query via deterministic pipeline (no agent)")
     print("  - quit: Exit the application")
@@ -768,36 +768,36 @@ def main():
             command = input("\n🔍 Enter command (search/search-fast/quit): ").strip().lower()
 
             if command == "quit":
-                print("👋 Goodbye!")
+                print("Goodbye!")
                 break
 
             elif command in ("search", "search-fast"):
-                query = input("📝 Enter your clinical query: ").strip()
+                query = input("Enter your clinical query: ").strip()
                 if query:
-                    print(f"\n🔄 Searching for evidence on: {query}")
-                    print("⏳ This may take a minute...")
+                    print(f"\n Searching for evidence on: {query}")
+                    print("This may take a minute...")
 
                     if command == "search-fast":
                         results = navigator.query_evidence_fast(query)
                     else:
                         results = navigator.query_evidence(query)
 
-                    print("\n📊 Results Summary:")
+                    print("\nResults Summary:")
                     print(f"   Query: {results['query']}")
                     print(f"   Timestamp: {results['timestamp']}")
                     print(f"   Evidence pieces (indexed): {results['evidence_count']}")
-                    print(f"\n📄 Detailed Results:\n{results['results']}")
+                    print(f"\n Detailed Results:\n{results['results']}")
                 else:
-                    print("❌ Please enter a valid query")
+                    print("Please enter a valid query")
 
             else:
-                print("❌ Unknown command. Use 'search', 'search-fast' or 'quit'")
+                print("Unknown command. Use 'search', 'search-fast' or 'quit'")
 
         except KeyboardInterrupt:
-            print("\n\n👋 Exiting...")
+            print("\n\nExiting...")
             break
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
             logger.exception("Application error")
 
 
