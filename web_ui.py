@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from clinical_evidence_cloud import ClinicalEvidenceNavigator
+from clinical_evidence import ClinicalEvidenceNavigator
 
 # --- Page config ---
 st.set_page_config(
@@ -294,3 +294,4 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
