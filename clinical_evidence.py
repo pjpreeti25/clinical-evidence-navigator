@@ -141,8 +141,7 @@ class ClinicalEvidenceNavigator:
             self.groq_client = Groq(api_key=api_key)
             
             # Use Llama 3.1 70B model (fast and high quality)
-            self.model_name = "llama3-1-70b-versatile"
-            
+            self.model_name = "llama-3.1-8b-instant"            
             # Create CrewAI LLM binding for Groq
             self.crewai_llm = LLM(
                 model="groq/llama3-1-70b-versatile",
@@ -803,3 +802,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
