@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+Free Agentic AI Clinical Evidence Navigator - Cloud Version
+Built with CrewAI, Chroma, Groq API, and custom scrapers
+Modified for Streamlit Cloud deployment
+"""
+
 import os
 import sqlite3
 import logging
@@ -119,45 +125,39 @@ class ClinicalEvidenceNavigator:
         logger.info("Vector store initialized successfully")
 
     # ----------------------------
+    # Groq API & CrewAI LLM
+    # ----------------------------
     def setup_groq(self):
-    """Initialize Groq API client and create CrewAI LLM binding."""
+        """Initialize Groq API client and create CrewAI LLM binding."""
         try:
             api_key = os.getenv("GROQ_API_KEY")
-            print(f"API Key found: {api_key[:10]}..." if api_key else "No API key")
             if not api_key:
-                logger.warning("GROQ_API_KEY not found")
+                logger.warning("GROQ_API_KEY not found. Please set it as an environment variable.")
+                self.model_name = None
+                self.crewai_llm = None
+                self.groq_client = None
                 return
-            
-            self.groq_client = Groq(api_key=api_key)
-            print("Groq client created successfully")
-        
-        # Test the API
-            test_response = self.groq_client.chat.completions.create(
-               model="llama-3.1-8b-instant",
-               messages=[{"role": "user", "content": "Hello"}],
-               max_tokens=10 )
-            print("Test API call successful")
-        
-        # Set model name
-            self.model_name = "llama-3.1-8b-instant"
-        
-        # Create CrewAI LLM binding for Groq
-           self.crewai_llm = LLM(
-              model="groq/llama-3.1-8b-instant",
-              api_key=api_key,
-              temperature=0.2,
-              timeout=60,
-              max_tokens=1024,
-           )
 
-           logger.info("Groq API initialized with model: %s", self.model_name)
-        
+            self.groq_client = Groq(api_key=api_key)
+            
+            # Use Llama 3.1 8B model (fast and high quality)
+            self.model_name = "llama-3.1-8b-instant"
+            
+            # Create CrewAI LLM binding for Groq
+            self.crewai_llm = LLM(
+                model="groq/llama-3.1-8b-instant",
+                api_key=api_key,
+                temperature=0.2,
+                timeout=60,
+                max_tokens=1024,
+            )
+
+            logger.info("Groq API initialized with model: %s", self.model_name)
         except Exception as e:
-           print(f"Groq setup error: {e}")
-           logger.error(f"Groq setup failed: {e}")
-           self.model_name = None
-           self.crewai_llm = None
-           self.groq_client = None
+            logger.error("Groq setup failed: %s", e)
+            self.model_name = None
+            self.crewai_llm = None
+            self.groq_client = None
 
     # ----------------------------
     # Persistence helpers
@@ -751,14 +751,14 @@ Provide specific, actionable gap analysis.
 # ============================================================
 def main():
     """Main application entry point"""
-    print(" Clinical Evidence Navigator - Cloud Version Starting...")
+    print("🏥 Clinical Evidence Navigator - Cloud Version Starting...")
 
     navigator = ClinicalEvidenceNavigator()
 
-    print("\n System initialized successfully!")
+    print("\n✅ System initialized successfully!")
     if not navigator.model_name:
-        print("Groq API not configured. Please set GROQ_API_KEY environment variable.")
-    print("Available commands:")
+        print("⚠️  Groq API not configured. Please set GROQ_API_KEY environment variable.")
+    print("📋 Available commands:")
     print("  - search: Query clinical evidence (agent)")
     print("  - search-fast: Query via deterministic pipeline (no agent)")
     print("  - quit: Exit the application")
@@ -768,43 +768,38 @@ def main():
             command = input("\n🔍 Enter command (search/search-fast/quit): ").strip().lower()
 
             if command == "quit":
-                print("Goodbye!")
+                print("👋 Goodbye!")
                 break
 
             elif command in ("search", "search-fast"):
-                query = input("Enter your clinical query: ").strip()
+                query = input("📝 Enter your clinical query: ").strip()
                 if query:
-                    print(f"\n Searching for evidence on: {query}")
-                    print("This may take a minute...")
+                    print(f"\n🔄 Searching for evidence on: {query}")
+                    print("⏳ This may take a minute...")
 
                     if command == "search-fast":
                         results = navigator.query_evidence_fast(query)
                     else:
                         results = navigator.query_evidence(query)
 
-                    print("\nResults Summary:")
+                    print("\n📊 Results Summary:")
                     print(f"   Query: {results['query']}")
                     print(f"   Timestamp: {results['timestamp']}")
                     print(f"   Evidence pieces (indexed): {results['evidence_count']}")
-                    print(f"\n Detailed Results:\n{results['results']}")
+                    print(f"\n📄 Detailed Results:\n{results['results']}")
                 else:
-                    print("Please enter a valid query")
+                    print("❌ Please enter a valid query")
 
             else:
-                print("Unknown command. Use 'search', 'search-fast' or 'quit'")
+                print("❌ Unknown command. Use 'search', 'search-fast' or 'quit'")
 
         except KeyboardInterrupt:
-            print("\n\nExiting...")
+            print("\n\n👋 Exiting...")
             break
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"❌ Error: {e}")
             logger.exception("Application error")
-
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
