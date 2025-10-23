@@ -144,7 +144,7 @@ class ClinicalEvidenceNavigator:
             self.model_name = "llama-3.1-8b-instant"            
             # Create CrewAI LLM binding for Groq
             self.crewai_llm = LLM(
-                model="groq/llama3-1-70b-versatile",
+                model="groq/llama-3.1-8b-instant",
                 api_key=api_key,
                 temperature=0.2,
                 timeout=60,
@@ -658,7 +658,7 @@ Provide a structured analysis using evidence-based medicine principles.
             """.strip()
 
             response = self.groq_client.chat.completions.create(
-                model="llama3-1-70b-versatile",
+                model="llama-3.1-8b-instant",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=1024,
@@ -697,7 +697,7 @@ Format as a professional clinical evidence report.
             """.strip()
 
             response = self.groq_client.chat.completions.create(
-                model="llama3-1-70b-versatile",
+                model="llama-3.1-8b-instant",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=1024,
@@ -735,7 +735,7 @@ Provide specific, actionable gap analysis.
             """.strip()
 
             response = self.groq_client.chat.completions.create(
-                model="llama3-1-70b-versatile",
+                model="llama-3.1-8b-instant",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=1024,
@@ -802,4 +802,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
