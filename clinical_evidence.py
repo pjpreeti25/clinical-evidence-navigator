@@ -128,35 +128,45 @@ class ClinicalEvidenceNavigator:
     # Groq API & CrewAI LLM
     # ----------------------------
     def setup_groq(self):
-        """Initialize Groq API client and create CrewAI LLM binding."""
-        try:
-            api_key = os.getenv("GROQ_API_KEY")
-            if not api_key:
-                logger.warning("GROQ_API_KEY not found. Please set it as an environment variable.")
-                self.model_name = None
-                self.crewai_llm = None
-                self.groq_client = None
-                return
-
-            self.groq_client = Groq(api_key=api_key)
+    """Initialize Groq API client and create CrewAI LLM binding."""
+    try:
+        api_key = os.getenv("GROQ_API_KEY")
+        print(f"API Key found: {api_key[:10]}..." if api_key else "No API key")
+        
+        if not api_key:
+            logger.warning("GROQ_API_KEY not found")
+            return
             
-            # Use Llama 3.1 70B model (fast and high quality)
-            self.model_name = "llama-3.1-8b-instant"            
-            # Create CrewAI LLM binding for Groq
-            self.crewai_llm = LLM(
-                model="groq/llama-3.1-8b-instant",
-                api_key=api_key,
-                temperature=0.2,
-                timeout=60,
-                max_tokens=1024,
-            )
+        self.groq_client = Groq(api_key=api_key)
+        print("Groq client created successfully")
+        
+        # Test the API
+        test_response = self.groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": "Hello"}],
+            max_tokens=10
+        )
+        print("Test API call successful")
+        
+        # Set model name
+        self.model_name = "llama-3.1-8b-instant"
+        
+        # Create CrewAI LLM binding for Groq
+        self.crewai_llm = LLM(
+            model="groq/llama-3.1-8b-instant",
+            api_key=api_key,
+            temperature=0.2,
+            timeout=60,
+            max_tokens=1024,
+        )
 
-            logger.info("Groq API initialized with model: %s", self.model_name)
-        except Exception as e:
-            logger.error("Groq setup failed: %s", e)
-            self.model_name = None
-            self.crewai_llm = None
-            self.groq_client = None
+        logger.info("Groq API initialized with model: %s", self.model_name)
+    except Exception as e:
+        print(f"Groq setup error: {e}")
+        logger.error(f"Groq setup failed: {e}")
+        self.model_name = None
+        self.crewai_llm = None
+        self.groq_client = None
 
     # ----------------------------
     # Persistence helpers
@@ -800,7 +810,9 @@ def main():
             logger.exception("Application error")
 
 
+
 if __name__ == "__main__":
     main()
+
 
 
