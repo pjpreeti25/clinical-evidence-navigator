@@ -6,3 +6,4 @@ crewai>=0.1.0
 pandas>=2.0.0
 plotly>=5.15.0
 groq>=0.4.0
+lxml>=4.9.0
